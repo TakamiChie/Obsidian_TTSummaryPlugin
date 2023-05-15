@@ -66,19 +66,19 @@ export function sortProjectsByDuration(projects: Projects): [string, ProjectData
   return sortedProjects;
 }
 
-export async function aggregateWeekly(apiKey: string, fromDate: Date, toDate: Date): string {
+export async function aggregateWeekly(apiKey: string, fromDate: Date, toDate: Date): Promise<string> {
+  let result = "";
   try {
     const entries: TimeEntry[] = await fetchData(apiKey, fromDate, toDate); 
     const { projects, totalDuration } = aggregateProjects(entries);
     const sortedProjects: [string, ProjectData][] = sortProjectsByDuration(projects);
-    let result = "";
     sortedProjects.slice(0, 3).forEach(([projectName, projectData]) => {
       const duration: number = projectData.duration / 1000 / 60 / 60;
       const percentage: string = ((duration / totalDuration) * 100).toFixed(2);
       result += `${projectName}: ${duration}時間 (${percentage}%)\n`;
     });
-    return result;
   } catch (error) {
     console.error('Error:', error.message);
   }
+  return result;
 }
