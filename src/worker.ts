@@ -1,30 +1,20 @@
+export interface NameEntry{
+  name: string;
+  id: number;
+}
 
-interface TimeEntry {
-  project: string;
+export interface TimeEntry{
+  name: string;
   duration: number;
 }
 
-interface ProjectData {
-  duration: number;
-}
-
-interface Projects {
-  [key: string]: ProjectData;
-}
-
-interface AggregatedData {
-  projects: Projects;
-  totalDuration: number;
-}
-
-export async function fetchData(apiKey: string,startDate: Date, endDate: Date): Promise<TimeEntry[]>  {
-  const toS = (d: Date) => { return d.toISOString().split('T')[0];}
+async function request(apiname: string, apiKey: string): Promise<any>  {
   const response = await fetch(
-    `https://api.track.toggl.com/api/v8/time_entries?start_date=${toS(startDate)}&end_date=${toS(endDate)}`,
+    `https://api.track.toggl.com/api/v9/${apiname}`,
     {
       headers: {
-        Authorization: `Basic ${Buffer.from(`${apiKey}:api_token`, "base64")}`,
-      }
+        Authorization: `Basic ${Buffer.from(`${apiKey}:api_token`).toString("base64")}`,
+      },
     }
   );
 
@@ -35,50 +25,25 @@ export async function fetchData(apiKey: string,startDate: Date, endDate: Date): 
   return await response.json();
 }
 
-export function aggregateProjects(entries: TimeEntry[]): AggregatedData {
-  const projects: Projects = {};
-  let totalDuration = 0;
-
-  entries.forEach(entry => {
-    const projectName: string = entry.project;
-
-    if (!projects[projectName]) {
-      projects[projectName] = {
-        duration: 0,
-      };
+export async function getWorkspaceList(apiKey: string): Promise<NameEntry[]> {
+  const ret = await request("workspaces", apiKey);
+  return Array.from(ret).map((n: {[key:string]:string}) => { 
+    return {
+      name: n["name"], 
+      id: parseInt(n["id"])
     }
-
-    projects[projectName].duration += entry.duration;
-    totalDuration += entry.duration;
   });
-
-  return {
-    projects,
-    totalDuration,
-  };
 }
 
-export function sortProjectsByDuration(projects: Projects): [string, ProjectData][] {
-  const sortedProjects: [string, ProjectData][] = Object.entries(projects).sort(
-    (a, b) => b[1].duration - a[1].duration
-  );
-
-  return sortedProjects;
-}
-
-export async function aggregateWeekly(apiKey: string, fromDate: Date, toDate: Date): Promise<string> {
-  let result = "";
-  try {
-    const entries: TimeEntry[] = await fetchData(apiKey, fromDate, toDate); 
-    const { projects, totalDuration } = aggregateProjects(entries);
-    const sortedProjects: [string, ProjectData][] = sortProjectsByDuration(projects);
-    sortedProjects.slice(0, 3).forEach(([projectName, projectData]) => {
-      const duration: number = projectData.duration / 1000 / 60 / 60;
-      const percentage: string = ((duration / totalDuration) * 100).toFixed(2);
-      result += `${projectName}: ${duration}時間 (${percentage}%)\n`;
-    });
-  } catch (error) {
-    console.error('Error:', error.message);
-  }
-  return result;
+export async function getFootprint(apiKey: string, startDate: Date, endDate: Date, workspace?: NameEntry): Promise<TimeEntry[]> {
+  const toS = (d: Date) => { return d.toISOString().split('T')[0];}
+  const wid = workspace ? workspace.id : 0; 
+  const ret = await request(`me/time_entries?start_date=${toS(startDate)};end_date=${toS(endDate)}`, apiKey);
+  const filterd = Array.from(ret).filter((n: {[key:string]:string}) => wid == 0 || parseInt(n.workspace_id) == wid);
+  return filterd.map((n: {[key:string]:string}) => {
+    return {
+      name: n["description"],
+      duration: parseInt(n["duration"])
+    }
+  } );
 }
